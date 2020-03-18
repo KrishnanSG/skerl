@@ -7,6 +7,7 @@
 #include<sys/types.h>
 #define SKERL_TOKKEN_BUFFERSIZE 64
 #define SKERL_TOKKEN_DELIMITER " "
+//#define SKERL_INTERNAL_COMMANDS 4
 
 char cwd[1024];
 
@@ -48,13 +49,65 @@ char **SkerlSplitCommand(char *inputCommand)
 	return tokens;
 }
 
+int SkerlExecuteExternalCommand(char **singleCommand)
+{
+	pid_t pid;
+	int status;
+
+	pid = fork();
+	if (pid == 0)
+	{
+		if (execvp(singleCommand[0], singleCommand) == -1)
+		{
+			perror("Skerl");
+		}
+		exit(EXIT_FAILURE);
+	}
+	else if (pid < 0)
+	{
+		perror("SKERL");
+	}
+	else
+	{
+		do 
+		{
+			waitpid(pid, &status, WUNTRACED);
+		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+	}
+	return 1;
+}
+
+int SkerlExecute(char **singleCommand)
+{
+	int i;
+
+	if (singleCommand[0] == NULL)
+	{
+		return 1;
+	}
+
+	//check if there are internal commands
+	/*
+	for (i = 0; i < SKERL_INTERNAL_COMMANDS; i++)\
+	{
+		if(strcmp(singleCommand[0], builtinCommand[i]) == 0)
+		{
+			return (*builtinCommand[i])(singleCommand);
+		}
+	}
+	*/
+
+	return SkerlExecuteExternalCommand(singleCommand);
+}
+
 void skerlParseInputCommand(char *inputCommand)
 {
 	//here we have to split the command (|)..if there are n pipe operators will get n-1 commands 
 	//that parsing should be done here..
 	//we have send n-1 commands to exec..
 	char **singleCommand = SkerlSplitCommand(inputCommand);
-	printf("%s",singleCommand[0]);
+	//now we need to execute the single command
+	SkerlExecute(singleCommand);
 }
 
 void SkerlPrompt()
