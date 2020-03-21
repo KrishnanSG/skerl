@@ -189,14 +189,87 @@ void skerl_prompt()
 		perror("getcwd error..");
 }
 
+int display_history_file()
+{
+	FILE *fptr;
+	fptr = fopen("history.txt","r");
+	int count = 0;
+
+	if (fptr == NULL)
+	{
+		perror("fopen error...");
+	}
+	else
+	{
+		char s[100];
+		while(fgets(s, sizeof(s), fptr) != NULL)
+		{
+			printf("%d %s\n", count+1, s);
+			count = count + 1;
+		}
+	}
+	if (count == 0)
+		return 0;
+	else
+		return 1;
+	fclose(fptr);
+}
+
+void write_history(char *command)
+{
+	FILE *fptr;
+	fptr = fopen("history.txt","a");
+	if (fptr == NULL)
+	{
+		perror("fopen error...");
+	}
+	else
+	{
+		fprintf(fptr, "%s", command);
+	}
+	fclose(fptr);
+}
+
+char *return_history(int history_number)
+{
+	FILE *fptr;
+	char s[100];
+	char *c;
+	fptr = fopen("history.txt","r");
+	int count = 0;
+
+	if (fptr == NULL)
+	{
+		perror("fopen error...");
+	}
+	else
+	{
+		while(fgets(s, sizeof(s), fptr) != NULL)
+		{
+			count = count + 1;
+			if (count == history_number)
+			{
+				fclose(fptr);
+				strcpy(c,s);
+				return c;
+			}
+		}
+	}
+	fclose(fptr);
+	return NULL;
+
+}
 int main(int argv, char **argc)
 {
 	char new_line_checker[2] = {"\n"};
 	char *input_command = NULL;
 	ssize_t input_command_buffer = 0;
+	int history_choice;
 	int flag = 0;
+	int enter_history = 0;
 	while (1)
 	{
+		enter_history = 0;
 		skerl_prompt();
 		getline(&input_command, &input_command_buffer, stdin);
 		if (strcmp(input_command,new_line_checker) == 0)
@@ -207,10 +280,39 @@ int main(int argv, char **argc)
 		if (strcmp(input_command,"exit") == 0)
 		{
 			printf("exiting skerl shell\n");
+			write_history(input_command);
 			flag = 1;
 			exit(0);
 		}
+		if (strcmp(input_command,"history") == 0)
+		{
+			int count = display_history_file();
+			if (count == 0)
+			{
+				printf("No recent history\n");
+				continue;
+			}
+			else
+			{
+				printf("\nEnter the history number : ")	;
+				scanf("%d",&history_choice);
+				input_command = return_history(history_choice);
+				if (input_command == NULL)
+				{
+					printf("wrong input\n");
+					continue;
+				}
+				write_history(input_command);
+				input_command[strlen(input_command) - 1] = '\0';
+				enter_history = 1;
+			}
+		}
+		if (enter_history == 0)
+		{
+			write_history(input_command);
+		}
 		skerl_parse_input_command(input_command);
+		input_command = NULL;
 	}
 	return EXIT_SUCCESS;
 }
