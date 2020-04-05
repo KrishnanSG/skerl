@@ -171,20 +171,17 @@ void skerl_parse_input_command(char *input_command)
 
 	// here we implement the logic to check for redirection
 	int type = 0;
-	/*
-	 * 0 - input
-	 * 1 - output
-	 * 2 - pipe
-	 */
 
 	for (int i = 1; i < token_count; i++)
 	{
 		if ((strcmp(command[i], ">") == 0) || (strcmp(command[i], ">>") == 0))
 		{
 			// output redirection
+			// stdout -> file
 			type = 1;
 			int saved_stdout = dup(1);
 			int output_file;
+
 			if (strcmp(command[i], ">") == 0)
 			{
 				FILE *fptr = fopen(command[i + 1], "w");
@@ -199,23 +196,23 @@ void skerl_parse_input_command(char *input_command)
 			}
 
 			int redirect_stream = dup2(output_file, 1);
-			char *cmd[] = {command[i - 1], NULL};
-			skerl_execute(cmd);
+			command[i] = NULL;
+			skerl_execute(command);
 			dup2(saved_stdout, 1);
 			close(saved_stdout);
 		}
 		else if (strcmp(command[i], "<") == 0)
 		{
 			// input redirection
-			// printf("INN");
-			type=1;
+			// file -> stdin
+			type = 1;
 			int input_file = open(command[i + 1], O_RDONLY);
 			if (input_file > 0)
 			{
 				int saved_stdin = dup(0);
 				int redirect_stream = dup2(input_file, 0);
-				char *cmd[] = {command[i - 1], NULL};
-				skerl_execute(cmd);
+				command[i] = NULL;
+				skerl_execute(command);
 				dup2(saved_stdin, 0);
 				close(saved_stdin);
 			}
@@ -228,6 +225,28 @@ void skerl_parse_input_command(char *input_command)
 		{
 			// pipes
 			type = 1;
+
+			// stdout -> file
+			int saved_stdout = dup(1);
+			int output_file;
+			FILE *fptr = fopen("temp", "w");
+			fclose(fptr);
+			output_file = open("temp", O_WRONLY);
+			dup2(output_file, 1);
+			command[i] = NULL;
+			skerl_execute(command);
+			dup2(saved_stdout, 1);
+			close(saved_stdout);
+
+			// file -> stdin
+			int input_file = open("temp", O_RDONLY);
+			int saved_stdin = dup(0);
+			dup2(input_file, 0);
+			char **cmd = &command[i+1];
+			skerl_execute(cmd);
+			dup2(saved_stdin, 0);
+			close(saved_stdin);
+			remove("temp");
 		}
 	}
 	if (type == 0)
