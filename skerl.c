@@ -8,24 +8,30 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <pwd.h>
 
 #define SKERL_TOKEN_BUFFERSIZE 64
 #define SKERL_TOKEN_DELIMITER " "
 
 char cwd[1024];
+int usage = 0; // counter variable to store the number of external commands used
 
 char *builtin_command[] = {
-	"cd", "pwd", "help"};
+	"cd", "pwd", "help", "globalusage", "averageusage"};
 
 /* Internal shell commands */
 int skerl_cd(char **internal_command);
 int skerl_pwd(char **internal_command);
 int skerl_help(char **internal_command);
+int skerl_globalusage(char **internal_command);
+int skerl_averageusage(char **internal_command);
 
 int (*execute_builtin_command[])(char **) = {
 	&skerl_cd,
 	&skerl_pwd,
-	&skerl_help};
+	&skerl_help,
+	&skerl_globalusage,
+	&skerl_averageusage};
 
 int skerl_total_builtin_command()
 {
@@ -75,6 +81,7 @@ int skerl_execute_external_command(char **single_command)
 {
 	pid_t pid;
 	int status;
+	usage++; // increment usage
 	pid = fork();
 	if (pid == 0)
 	{
@@ -101,17 +108,21 @@ int skerl_execute_external_command(char **single_command)
 /* Implementation of internal command (cd) */
 int skerl_cd(char **internal_command)
 {
-	char *h = "/home";
+	char *home_dir;
+	struct passwd *pwd;
+	pwd = getpwuid(getuid());
+	home_dir = pwd->pw_dir;
+
 	if (internal_command[1] == NULL)
 	{
-		chdir(h);
+		chdir(home_dir);
 	}
 	else if ((strcmp(internal_command[1], "~") == 0) || (strcmp(internal_command[1], "~/") == 0))
 	{
-		chdir(h);
+		chdir(home_dir);
 	}
 	else if (chdir(internal_command[1]) < 0)
-		printf("Skerl: cd: %s: No such file or directory\n", internal_command[1]);
+		printf("skerl: cd: %s: No such file or directory\n", internal_command[1]);
 }
 
 /* Implementation of internal command (help) */
@@ -141,6 +152,59 @@ int skerl_pwd(char **internal_command)
 	{
 		perror("getcwd() error");
 	}
+}
+
+int skerl_globalusage(char **internal_command)
+{
+	FILE *fptr;
+	// To get home directory of current user
+	char *home_dir;
+	struct passwd *pwd;
+	pwd = getpwuid(getuid());
+	home_dir = pwd->pw_dir;
+	fptr = fopen(strcat(home_dir, "/.usage.log"), "r");
+	if (fptr == NULL)
+	{
+		perror("skerl: ~/.usage_log not found");
+	}
+	else
+	{
+		int total = 0,value;
+		while(fscanf(fptr,"%d",&value)!=EOF)
+		{
+			total += value;
+		}
+		printf("skerl usage: %d commands :: current session %d commands\n",total,usage);
+	}
+	fclose(fptr);
+}
+
+int skerl_averageusage(char **internal_command)
+{
+	FILE *fptr;
+	// To get home directory of current user
+	char *home_dir;
+	struct passwd *pwd;
+	pwd = getpwuid(getuid());
+	home_dir = pwd->pw_dir;
+	fptr = fopen(strcat(home_dir, "/.usage.log"), "r");
+	if (fptr == NULL)
+	{
+		perror("skerl: ~/.usage_log not found");
+	}
+	else
+	{
+		int total = 0,count=0,value;
+		while(fscanf(fptr,"%d",&value)!=EOF)
+		{
+			total += value;
+			count++;
+		}
+		float avg_usage = total/count;
+		float per_utilization = usage/avg_usage*100;
+		printf("skerl average usage: %f commands :: current session %f\% \n",avg_usage,per_utilization);
+	}
+	fclose(fptr);
 }
 
 int skerl_execute(char **single_command)
@@ -242,7 +306,7 @@ void skerl_parse_input_command(char *input_command)
 			int input_file = open("temp", O_RDONLY);
 			int saved_stdin = dup(0);
 			dup2(input_file, 0);
-			char **cmd = &command[i+1];
+			char **cmd = &command[i + 1];
 			skerl_execute(cmd);
 			dup2(saved_stdin, 0);
 			close(saved_stdin);
@@ -329,6 +393,26 @@ char *return_history(int history_number)
 	return NULL;
 }
 
+void write_usage_log()
+{
+	FILE *fptr;
+	// To get home directory of current user
+	char *home_dir;
+	struct passwd *pwd;
+	pwd = getpwuid(getuid());
+	home_dir = pwd->pw_dir;
+	fptr = fopen(strcat(home_dir, "/.usage.log"), "a");
+	fprintf(fptr, "%d\n", usage);
+	fclose(fptr);
+}
+
+void sigint_handler(int sig_num)
+{
+	signal(SIGINT, sigint_handler);
+	fflush(stdout);
+	fflush(stdin);
+}
+
 int main(int argv, char **argc)
 {
 	char new_line_checker[2] = {"\n"};
@@ -337,6 +421,7 @@ int main(int argv, char **argc)
 	int history_choice;
 	int flag = 0;
 	int enter_history = 0;
+	signal(SIGINT, sigint_handler);
 	while (1)
 	{
 		enter_history = 0;
@@ -351,6 +436,7 @@ int main(int argv, char **argc)
 		{
 			printf("exiting skerl shell\n");
 			write_history(input_command);
+			write_usage_log();
 			flag = 1;
 			exit(0);
 		}
