@@ -179,7 +179,7 @@ void skerl_parse_input_command(char *input_command)
 
 	for (int i = 1; i < token_count; i++)
 	{
-		if ((strcmp(command[i], ">") == 0) || (strcmp(command[i], '>>') == 0))
+		if ((strcmp(command[i], ">") == 0) || (strcmp(command[i], ">>") == 0))
 		{
 			// output redirection
 			type = 1;
@@ -207,11 +207,17 @@ void skerl_parse_input_command(char *input_command)
 		else if (strcmp(command[i], "<") == 0)
 		{
 			// input redirection
+			// printf("INN");
+			type=1;
 			int input_file = open(command[i + 1], O_RDONLY);
 			if (input_file > 0)
 			{
+				int saved_stdin = dup(0);
 				int redirect_stream = dup2(input_file, 0);
-				skerl_execute(command[i - 1]);
+				char *cmd[] = {command[i - 1], NULL};
+				skerl_execute(cmd);
+				dup2(saved_stdin, 0);
+				close(saved_stdin);
 			}
 			else
 			{
