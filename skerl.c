@@ -1,3 +1,5 @@
+/* ---- Skerl Shell ---- */
+
 #include<stdlib.h>
 #include<stdio.h>
 #include<unistd.h>
@@ -5,8 +7,9 @@
 #include<sys/wait.h>
 #include<errno.h>
 #include<sys/types.h>
-#define SKERL_TOKKEN_BUFFERSIZE 64
-#define SKERL_TOKKEN_DELIMITER " "
+
+#define SKERL_TOKEN_BUFFERSIZE 64
+#define SKERL_TOKEN_DELIMITER " "
 
 char cwd[1024];
 
@@ -15,7 +18,7 @@ char *builtin_command[] = {
 };
 
 
-
+/* Internal shell commands */
 int skerl_cd(char **internal_command);
 int skerl_pwd(char **internal_command);
 int skerl_help(char **internal_command);
@@ -35,7 +38,7 @@ int skerl_total_builtin_command()
 
 char **skerl_split_command(char *input_command)
 {
-	int buffer_size = SKERL_TOKKEN_BUFFERSIZE, position = 0;
+	int buffer_size = SKERL_TOKEN_BUFFERSIZE, position = 0;
 	char **tokens = malloc(buffer_size * sizeof(char*));
 	char *token, **tokens_backup;
 
@@ -45,7 +48,7 @@ char **skerl_split_command(char *input_command)
 		exit(EXIT_FAILURE);
 	}
 
-	token = strtok(input_command, SKERL_TOKKEN_DELIMITER);
+	token = strtok(input_command, SKERL_TOKEN_DELIMITER);
 	while (token != NULL)
 	{
 		tokens[position] = token;
@@ -53,7 +56,7 @@ char **skerl_split_command(char *input_command)
 
 		if (position >= buffer_size)
 		{
-			buffer_size+= SKERL_TOKKEN_BUFFERSIZE;
+			buffer_size+= SKERL_TOKEN_BUFFERSIZE;
 			tokens_backup = tokens;
 			tokens = realloc(tokens, buffer_size * sizeof(char*));
 
@@ -65,7 +68,7 @@ char **skerl_split_command(char *input_command)
 			}
 		}
 
-		token = strtok(NULL, SKERL_TOKKEN_DELIMITER);
+		token = strtok(NULL, SKERL_TOKEN_DELIMITER);
 	}
 	tokens[position] = NULL;
 	return tokens;
@@ -99,6 +102,7 @@ int skerl_execute_external_command(char **single_command)
 	return 1;
 }
 
+/* Implementation of internal command (cd) */
 int skerl_cd(char **internal_command)
 {
 	char *h="/home";
@@ -114,6 +118,7 @@ int skerl_cd(char **internal_command)
 		printf("Skerl: cd: %s: No such file or directory\n", internal_command[1]);
 }
 
+/* Implementation of internal command (help) */
 int skerl_help(char **internal_command)
 {
 	int i;
@@ -130,6 +135,7 @@ int skerl_help(char **internal_command)
 
 }
 
+/* Implementation of internal command (pwd) */
 int skerl_pwd(char **internal_command)
 {
 	if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -177,13 +183,13 @@ void skerl_parse_input_command(char *input_command)
 
 void skerl_prompt()
 {
-	char decorate_terminal[1024];
+	char prompt_msg[1024];
 	if (getcwd(cwd, sizeof(cwd)) != NULL)
 	{
-		strcpy(decorate_terminal,"skerl:~");
-		strcat(decorate_terminal,cwd);
-		strcat(decorate_terminal,"$ ");
-		printf("%s", decorate_terminal);
+		strcpy(prompt_msg,"skerl:~");
+		strcat(prompt_msg,cwd);
+		strcat(prompt_msg,"$ ");
+		printf("%s", prompt_msg);
 	}
 	else
 		perror("getcwd error..");
@@ -195,16 +201,12 @@ int display_history_file()
 	fptr = fopen("history.txt","r");
 	int count = 0;
 
-	if (fptr == NULL)
-	{
-		perror("fopen error...");
-	}
-	else
+	if (fptr != NULL)
 	{
 		char s[100];
 		while(fgets(s, sizeof(s), fptr) != NULL)
 		{
-			printf("%d %s\n", count+1, s);
+			printf("#%d - %s", count+1, s);
 			count = count + 1;
 		}
 	}
@@ -215,21 +217,19 @@ int display_history_file()
 	fclose(fptr);
 }
 
+/* writes cmds into history file */
 void write_history(char *command)
 {
 	FILE *fptr;
 	fptr = fopen("history.txt","a");
-	if (fptr == NULL)
+	if (fptr != NULL)
 	{
-		perror("fopen error...");
-	}
-	else
-	{
-		fprintf(fptr, "%s", command);
+		fprintf(fptr, "%s\n", command);
 	}
 	fclose(fptr);
 }
 
+/* returns the cmd from history corresponding to the history number */
 char *return_history(int history_number)
 {
 	FILE *fptr;
@@ -238,11 +238,7 @@ char *return_history(int history_number)
 	fptr = fopen("history.txt","r");
 	int count = 0;
 
-	if (fptr == NULL)
-	{
-		perror("fopen error...");
-	}
-	else
+	if (fptr != NULL)
 	{
 		while(fgets(s, sizeof(s), fptr) != NULL)
 		{
@@ -259,10 +255,11 @@ char *return_history(int history_number)
 	return NULL;
 
 }
+
 int main(int argv, char **argc)
 {
 	char new_line_checker[2] = {"\n"};
-	char *input_command = NULL;
+	char *input_command = NULL;			// Stores the shell inputs
 	ssize_t input_command_buffer = 0;
 	int history_choice;
 	int flag = 0;
@@ -271,13 +268,13 @@ int main(int argv, char **argc)
 	{
 		enter_history = 0;
 		skerl_prompt();
-		getline(&input_command, &input_command_buffer, stdin);
+		getline(&input_command, &input_command_buffer, stdin);	// accept input 
 		if (strcmp(input_command,new_line_checker) == 0)
 		{
 			continue;
 		}
 		input_command[strlen(input_command)-1] = '\0';
-		if (strcmp(input_command,"exit") == 0)
+		if (strcmp(input_command,"exit") == 0)		// terminate shell on exit cmd
 		{
 			printf("exiting skerl shell\n");
 			write_history(input_command);
@@ -311,7 +308,7 @@ int main(int argv, char **argc)
 		{
 			write_history(input_command);
 		}
-		skerl_parse_input_command(input_command);
+		skerl_parse_input_command(input_command);	// handle and parse internal and external cmds
 		input_command = NULL;
 	}
 	return EXIT_SUCCESS;
