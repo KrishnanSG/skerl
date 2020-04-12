@@ -77,7 +77,7 @@ char **skerl_split_command(char *input_command, int *count)
 	return tokens;
 }
 
-int skerl_execute_external_command(char **single_command)
+int skerl_execute_external_command(char **single_command, int background)
 {
 	pid_t pid;
 	int status;
@@ -97,10 +97,18 @@ int skerl_execute_external_command(char **single_command)
 	}
 	else
 	{
-		do
+		if (!background)
 		{
-			waitpid(pid, &status, WUNTRACED);
-		} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+			do
+			{
+				waitpid(pid, &status, WUNTRACED);
+			} while (!WIFEXITED(status) && !WIFSIGNALED(status));
+		}
+		else
+		{
+			printf("child process with pid [%d] is running as background process\n", pid);
+		}
+		
 	}
 	return 1;
 }
@@ -169,12 +177,12 @@ int skerl_globalusage(char **internal_command)
 	}
 	else
 	{
-		int total = 0,value;
-		while(fscanf(fptr,"%d",&value)!=EOF)
+		int total = 0, value;
+		while (fscanf(fptr, "%d", &value) != EOF)
 		{
 			total += value;
 		}
-		printf("skerl usage: %d commands :: current session %d commands\n",total,usage);
+		printf("skerl usage: %d commands :: current session %d commands\n", total, usage);
 	}
 	fclose(fptr);
 }
@@ -194,20 +202,20 @@ int skerl_averageusage(char **internal_command)
 	}
 	else
 	{
-		int total = 0,count=0,value;
-		while(fscanf(fptr,"%d",&value)!=EOF)
+		int total = 0, count = 0, value;
+		while (fscanf(fptr, "%d", &value) != EOF)
 		{
 			total += value;
 			count++;
 		}
-		float avg_usage = total/count;
-		float per_utilization = usage/avg_usage*100;
-		printf("skerl average usage: %f commands :: current session %f\% \n",avg_usage,per_utilization);
+		float avg_usage = total / count;
+		float per_utilization = usage / avg_usage * 100;
+		printf("skerl average usage: %f commands :: current session %f\% \n", avg_usage, per_utilization);
 	}
 	fclose(fptr);
 }
 
-int skerl_execute(char **single_command)
+int skerl_execute(char **single_command, int background)
 {
 	int i;
 
@@ -223,7 +231,7 @@ int skerl_execute(char **single_command)
 			return (*execute_builtin_command[i])(single_command);
 		}
 	}
-	return skerl_execute_external_command(single_command);
+	return skerl_execute_external_command(single_command, background);
 }
 
 /* parses the commanfd and tokenizes the input string */
@@ -238,7 +246,14 @@ void skerl_parse_input_command(char *input_command)
 
 	for (int i = 1; i < token_count; i++)
 	{
-		if ((strcmp(command[i], ">") == 0) || (strcmp(command[i], ">>") == 0))
+		if (strcmp(command[i], "&") == 0)
+		{
+			// run as background process
+			type = 1;
+			command[i] = NULL;
+			skerl_execute(command,1);
+		}
+		else if ((strcmp(command[i], ">") == 0) || (strcmp(command[i], ">>") == 0))
 		{
 			// output redirection
 			// stdout -> file
@@ -261,7 +276,7 @@ void skerl_parse_input_command(char *input_command)
 
 			int redirect_stream = dup2(output_file, 1);
 			command[i] = NULL;
-			skerl_execute(command);
+			skerl_execute(command,0);
 			dup2(saved_stdout, 1);
 			close(saved_stdout);
 		}
@@ -276,7 +291,7 @@ void skerl_parse_input_command(char *input_command)
 				int saved_stdin = dup(0);
 				int redirect_stream = dup2(input_file, 0);
 				command[i] = NULL;
-				skerl_execute(command);
+				skerl_execute(command,0);
 				dup2(saved_stdin, 0);
 				close(saved_stdin);
 			}
@@ -298,7 +313,7 @@ void skerl_parse_input_command(char *input_command)
 			output_file = open("temp", O_WRONLY);
 			dup2(output_file, 1);
 			command[i] = NULL;
-			skerl_execute(command);
+			skerl_execute(command,0);
 			dup2(saved_stdout, 1);
 			close(saved_stdout);
 
@@ -307,7 +322,7 @@ void skerl_parse_input_command(char *input_command)
 			int saved_stdin = dup(0);
 			dup2(input_file, 0);
 			char **cmd = &command[i + 1];
-			skerl_execute(cmd);
+			skerl_execute(cmd,0);
 			dup2(saved_stdin, 0);
 			close(saved_stdin);
 			remove("temp");
@@ -315,7 +330,7 @@ void skerl_parse_input_command(char *input_command)
 	}
 	if (type == 0)
 	{
-		skerl_execute(command);
+		skerl_execute(command,0);
 	}
 }
 
